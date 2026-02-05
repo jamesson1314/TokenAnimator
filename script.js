@@ -1,13 +1,14 @@
 /**
  * RPG Token Animator V2
- * Engine Otimizada para Efeitos Locais (Canvas 2D Composite)
+ * Engine Otimizada para Efeitos Locais (Canvas Composition)
  */
 class TokenEngine {
     constructor() {
+        // Inicialização do Contexto
         this.canvas = document.getElementById('tokenCanvas');
         this.ctx = this.canvas.getContext('2d', { alpha: true }); // Suporte a transparência
         
-        // Elementos de UI auxiliares
+        // Elementos de UI
         this.markerEl = document.getElementById('target-marker');
         this.placeholder = document.getElementById('placeholder-text');
         this.statusEl = document.getElementById('status-bar');
@@ -19,19 +20,20 @@ class TokenEngine {
         this.isPickingPoint = false;
         this.animationId = null;
 
-        // Configuração Padrão
+        // Configuração (Model)
         this.config = {
             speed: 1.5,
-            radius: 150,    // Raio da área de efeito em pixels
+            radius: 150,    // Raio da área de efeito (px)
             amp: 0.10,      // Amplitude (0.0 a 0.3)
             glow: 0,
-            duration: 3     // Segundos para gravação
+            duration: 3     // Segundos para exportação
         };
 
-        // Estado do Pivô (Centro da respiração)
+        // Estado do Pivô (Ponto de respiração)
+        // Inicialmente 0,0, será setado para o centro da imagem ao carregar
         this.pivot = { x: 0, y: 0, set: false };
 
-        // Canvas Offscreen para performance (buffer de composição)
+        // Buffer Offscreen (Performance crítica para composição)
         this.memCanvas = document.createElement('canvas');
         this.memCtx = this.memCanvas.getContext('2d');
 
@@ -40,11 +42,11 @@ class TokenEngine {
     }
 
     initListeners() {
-        // 1. Upload
+        // 1. Upload de Imagem
         const imgInput = document.getElementById('imageInput');
         imgInput.addEventListener('change', (e) => this.handleImageUpload(e));
 
-        // Drag & Drop na área do canvas
+        // Drag & Drop
         const dropZone = document.querySelector('.viewport');
         dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.style.background = '#27272a'; });
         dropZone.addEventListener('dragleave', (e) => { e.preventDefault(); dropZone.style.background = ''; });
@@ -54,89 +56,80 @@ class TokenEngine {
             if(e.dataTransfer.files.length) this.handleImageUpload({ target: { files: e.dataTransfer.files } });
         });
 
-        // 2. Controles Deslizantes
+        // 2. Sliders
         this.bindSlider('ctrl-speed', 'val-speed', v => this.config.speed = parseFloat(v));
         this.bindSlider('ctrl-radius', 'val-radius', v => this.config.radius = parseInt(v));
         this.bindSlider('ctrl-amp', 'val-amp', v => this.config.amp = parseInt(v) / 100);
         this.bindSlider('ctrl-glow', 'val-glow', v => this.config.glow = parseInt(v));
         this.bindSlider('ctrl-dur', 'val-dur', v => this.config.duration = parseInt(v));
 
-        // 3. Sistema de Pivô
+        // 3. Sistema de Marcação de Ponto (Targeting)
         const btnSetPoint = document.getElementById('btn-set-point');
         btnSetPoint.addEventListener('click', () => {
             if(!this.isLoaded) return alert("Carregue uma imagem primeiro!");
+            
             this.isPickingPoint = !this.isPickingPoint;
             
             if(this.isPickingPoint) {
                 btnSetPoint.classList.add('active');
-                btnSetPoint.innerText = "Clique no Peito/Centro";
-                this.canvas.classList.add('picking-mode');
-                this.statusEl.innerText = "Modo de Seleção: Clique na imagem";
+                btnSetPoint.innerText = "Clique na Imagem...";
+                this.canvas.classList.add('picking');
+                this.statusEl.innerText = "MODO DE MIRA: Clique no peito do personagem";
             } else {
                 this.cancelPickingMode();
             }
         });
 
-        // Clique no Canvas para definir ponto
+        // Clique no Canvas (Matemática de Coordenadas)
         this.canvas.addEventListener('mousedown', (e) => {
             if(!this.isPickingPoint || !this.isLoaded) return;
             
-            // Matemática para converter clique na tela -> pixel interno da imagem
+            // Retângulo do Canvas na tela (CSS Pixels)
             const rect = this.canvas.getBoundingClientRect();
+            
+            // Fatores de escala (Internal Resolution / CSS Resolution)
             const scaleX = this.canvas.width / rect.width;
             const scaleY = this.canvas.height / rect.height;
 
+            // Coordenada do clique convertida para Pixel Real da imagem
             const x = (e.clientX - rect.left) * scaleX;
             const y = (e.clientY - rect.top) * scaleY;
 
             this.pivot = { x, y, set: true };
-            this.updateMarkerVisual(e.clientX - rect.left, e.clientY - rect.top); // Posição visual CSS
             
-            document.getElementById('point-status').innerText = `X: ${Math.round(x)}, Y: ${Math.round(y)}`;
+            // Atualiza Visual
+            this.updateMarkerVisual(e.clientX - rect.left, e.clientY - rect.top); 
+            document.getElementById('point-coords').innerText = `X:${Math.round(x)} Y:${Math.round(y)}`;
+            
             this.cancelPickingMode();
         });
 
-        // Botões de Ação
+        // 4. Controles de Playback
         document.getElementById('btn-toggle').addEventListener('click', (e) => {
             this.isPlaying = !this.isPlaying;
-            e.target.innerText = this.isPlaying ? "⏸ Pausar Animação" : "▶ Continuar";
+            e.target.innerText = this.isPlaying ? "⏸ Pausar" : "▶ Continuar";
             if(this.isPlaying) this.loop();
-            else this.draw(); // Desenha um frame estático
+            else this.draw(); // Renderiza um frame estático
         });
 
-        document.getElementById('btn-reset').addEventListener('click', () => {
-            // Reset lógica
-            this.config = { speed: 1.5, radius: 150, amp: 0.10, glow: 0, duration: 3 };
-            this.pivot = { x: this.canvas.width/2, y: this.canvas.height/2, set: false };
-            this.markerEl.style.display = 'none';
-            document.getElementById('point-status').innerText = "Centro da Imagem";
-            
-            // Reset UI inputs
-            ['speed', 'radius', 'amp', 'glow', 'dur'].forEach(k => {
-                // Atualiza sliders visualmente (necessário mapeamento manual simples aqui)
-                // Simplificação para brevidade
-            });
-            // Recarrega valores padrão nos inputs (idealmente funções auxiliares)
-            document.getElementById('ctrl-speed').value = 1.5; document.getElementById('val-speed').innerText = 1.5;
-            document.getElementById('ctrl-radius').value = 150; document.getElementById('val-radius').innerText = 150;
-            // ... outros resets ...
-        });
+        document.getElementById('btn-reset').addEventListener('click', () => this.resetSettings());
 
-        // Exportação
+        // 5. Exportação
         document.getElementById('btn-snap').addEventListener('click', () => this.exportImage());
         document.getElementById('btn-rec').addEventListener('click', () => this.exportVideo());
     }
 
     cancelPickingMode() {
         this.isPickingPoint = false;
-        document.getElementById('btn-set-point').classList.remove('active');
-        document.getElementById('btn-set-point').innerText = "🎯 Definir Ponto Central";
-        this.canvas.classList.remove('picking-mode');
+        const btn = document.getElementById('btn-set-point');
+        btn.classList.remove('active');
+        btn.innerText = "🎯 Definir Ponto (Peito)";
+        this.canvas.classList.remove('picking');
         this.statusEl.innerText = "Pronto";
     }
 
     updateMarkerVisual(cssX, cssY) {
-        // Ajusta o marcador HTML sobre o canvas
+        // Posiciona o elemento HTML sobre o canvas
         this.markerEl.style.display = 'block';
         this.markerEl.style.left = cssX + 'px';
         this.markerEl.style.top = cssY + 'px';
@@ -153,8 +146,8 @@ class TokenEngine {
                 this.isLoaded = true;
                 this.placeholder.style.display = 'none';
                 
-                // Define tamanho interno igual à imagem (Qualidade Máxima)
-                // Limitamos a 2048px para evitar crash em mobile se for imagem 8k
+                // Define tamanho do Canvas igual à imagem (Qualidade Máxima)
+                // Limitamos a 2048px para evitar crash em mobile
                 const maxDim = 2048;
                 let w = this.image.width;
                 let h = this.image.height;
@@ -168,19 +161,29 @@ class TokenEngine {
                 this.canvas.width = w;
                 this.canvas.height = h;
                 
-                // Pivô inicial no centro
-                this.pivot = { x: w / 2, y: h / 2, set: false };
-                this.markerEl.style.display = 'none';
-                
-                // Prepara buffer offscreen (mesmo tamanho para evitar resize constante)
+                // Buffer precisa ter o mesmo tamanho
                 this.memCanvas.width = w;
                 this.memCanvas.height = h;
 
+                // Reseta pivô para o centro
+                this.pivot = { x: w / 2, y: h / 2, set: false };
+                this.markerEl.style.display = 'none';
                 this.statusEl.innerText = `Imagem carregada: ${w}x${h}px`;
+                
                 this.draw();
             };
         };
         reader.readAsDataURL(file);
+    }
+
+    resetSettings() {
+        this.config = { speed: 1.5, radius: 150, amp: 0.10, glow: 0, duration: 3 };
+        // Reset Inputs visualmente
+        document.getElementById('ctrl-speed').value = 1.5; document.getElementById('val-speed').innerText = 1.5;
+        document.getElementById('ctrl-radius').value = 150; document.getElementById('val-radius').innerText = 150;
+        document.getElementById('ctrl-amp').value = 10; document.getElementById('val-amp').innerText = 10;
+        document.getElementById('ctrl-glow').value = 0; document.getElementById('val-glow').innerText = 0;
+        document.getElementById('ctrl-dur').value = 3; document.getElementById('val-dur').innerText = 3;
     }
 
     bindSlider(id, displayId, callback) {
@@ -193,27 +196,24 @@ class TokenEngine {
     }
 
     /**
-     * Lógica de Renderização
+     * CORE: Lógica de Renderização
      * Usa composição para criar efeito de "lente" no peito
      */
     draw() {
         if (!this.isLoaded) return;
 
-        // 1. Limpa
+        // 1. Limpa Tela Principal
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
-        // 2. Calcula ciclo de respiração (Senoide)
+        // 2. Calcula Ciclo (Senoide normalizada 0..1)
         const time = Date.now() / 1000;
-        // Normaliza de -1..1 para 0..1 para facilitar
         const cycle = (Math.sin(time * this.config.speed) + 1) / 2; 
-        
-        // 3. Desenha imagem BASE (fundo estático)
+
+        // 3. Desenha Imagem Base (Fundo Estático)
         this.ctx.drawImage(this.image, 0, 0, this.canvas.width, this.canvas.height);
 
+        // Se amplitude for 0, não gasta processamento com efeito
         if (this.config.amp > 0) {
-            // 4. Efeito de "Bulge" (Inchaço) Localizado
-            // Estratégia: Recortar a área do peito, escalar ela e desenhar por cima com bordas suaves
-            
             const r = this.config.radius;
             const cx = this.pivot.x;
             const cy = this.pivot.y;
@@ -221,54 +221,51 @@ class TokenEngine {
             // Fator de escala atual (ex: 1.0 a 1.10)
             const currentScale = 1 + (cycle * this.config.amp);
             
-            // Tamanho da área de origem (source) vs destino (dest)
-            // Para dar "zoom", pegamos uma área menor da imagem original e desenhamos no tamanho do raio
-            // sourceRadius = r / currentScale -> Se scale aumenta, source diminui (zoom in)
-            const srcR = r / currentScale;
-
-            // CONFIGURAÇÃO DO BUFFER OFFSCREEN
-            // Limpa apenas a área necessária do buffer
+            // --- INÍCIO DO PROCESSO DE COMPOSIÇÃO ---
+            
+            // Limpa o buffer apenas na área que vamos usar
+            // (Otimização: não limpar buffer inteiro em 4k)
             this.memCtx.clearRect(0, 0, this.memCanvas.width, this.memCanvas.height);
-            
-            // Salva estado do buffer
             this.memCtx.save();
-            
-            // A. Cria a máscara circular (Gradient Alpha) no Buffer
-            // Isso garante que o efeito desapareça suavemente nas bordas
+
+            // A. Cria Máscara Radial no Buffer
+            // Um gradiente que vai de branco (opaco) para transparente
             const g = this.memCtx.createRadialGradient(cx, cy, r * 0.4, cx, cy, r);
-            g.addColorStop(0, "rgba(255,255,255, 1)");   // Centro totalmente opaco
-            g.addColorStop(1, "rgba(255,255,255, 0)");   // Borda transparente
+            g.addColorStop(0, "rgba(255,255,255, 1)");
+            g.addColorStop(1, "rgba(255,255,255, 0)"); // Fade suave nas bordas
             
             this.memCtx.fillStyle = g;
             this.memCtx.beginPath();
             this.memCtx.arc(cx, cy, r, 0, Math.PI * 2);
             this.memCtx.fill();
 
-            // B. Mantém apenas o que está dentro do gradiente (Source-In ou Source-Atop)
-            // 'source-in': Mantém a NOVA imagem (que desenharemos a seguir) onde a MÁSCARA existe
+            // B. Aplica "Source-In"
+            // Mantém pixels da próxima operação apenas onde a máscara existe
             this.memCtx.globalCompositeOperation = 'source-in';
 
-            // C. Desenha a imagem com Zoom (Centralizada no pivô)
-            // drawImage(img, sx, sy, sw, sh, dx, dy, dw, dh)
+            // C. Desenha a Imagem com "Zoom" no Buffer
+            // "Recortamos" uma área menor da imagem original (srcR) e desenhamos no tamanho do raio (r)
+            const srcR = r / currentScale; 
+
             this.memCtx.drawImage(
                 this.image, 
-                cx - srcR, cy - srcR, srcR * 2, srcR * 2, // Source (área menor = zoom)
+                cx - srcR, cy - srcR, srcR * 2, srcR * 2, // Source (área menor = zoom in)
                 cx - r, cy - r, r * 2, r * 2              // Destino (tamanho fixo na tela)
             );
 
-            this.memCtx.restore(); // Restaura composite default
+            this.memCtx.restore(); // Restaura modo de mistura
 
-            // 5. Compõe o Buffer na Tela Principal
+            // D. Copia o Buffer (apenas a parte inchada e suave) para a Tela Principal
             this.ctx.drawImage(this.memCanvas, 0, 0);
-            
-            // 6. Glow Sincronizado (Opcional)
+
+            // 4. Efeito Glow (Opcional)
             if (this.config.glow > 0) {
                 this.ctx.save();
-                this.ctx.globalCompositeOperation = 'lighter'; // Modo de mistura para brilho
-                const glowOpacity = cycle * (this.config.glow / 50); // 0.0 a 1.0
+                this.ctx.globalCompositeOperation = 'lighter'; // Modo Additivo
+                const glowOpacity = cycle * (this.config.glow / 50); 
                 
                 const gGlow = this.ctx.createRadialGradient(cx, cy, r * 0.2, cx, cy, r);
-                gGlow.addColorStop(0, `rgba(139, 92, 246, ${glowOpacity * 0.6})`);
+                gGlow.addColorStop(0, `rgba(139, 92, 246, ${glowOpacity * 0.5})`);
                 gGlow.addColorStop(1, "rgba(139, 92, 246, 0)");
                 
                 this.ctx.fillStyle = gGlow;
@@ -277,12 +274,6 @@ class TokenEngine {
                 this.ctx.fill();
                 this.ctx.restore();
             }
-        }
-        
-        // Desenha mira auxiliar se estiver escolhendo ponto (apenas visual debug)
-        if (this.isPickingPoint) {
-            // Lógica UI gerida fora do loop de draw para performance, 
-            // mas poderíamos desenhar no canvas aqui se quiséssemos.
         }
     }
 
@@ -295,10 +286,9 @@ class TokenEngine {
     // --- Exportação ---
 
     exportImage() {
-        // Renderiza um frame limpo
         this.draw();
         const link = document.createElement('a');
-        link.download = `token-snapshot-${Date.now()}.png`;
+        link.download = `token-${Date.now()}.png`;
         link.href = this.canvas.toDataURL('image/png');
         link.click();
     }
@@ -307,17 +297,16 @@ class TokenEngine {
         const btn = document.getElementById('btn-rec');
         const originalText = btn.innerText;
         const progressBar = document.getElementById('progress-bar');
-        const progressContainer = document.getElementById('progress-bar-container');
+        const progressContainer = document.getElementById('progress-container');
         
         btn.disabled = true;
-        btn.classList.add('recording');
         btn.innerText = "Gravando...";
         progressContainer.style.display = 'block';
 
         const stream = this.canvas.captureStream(60);
         const recorder = new MediaRecorder(stream, {
             mimeType: 'video/webm;codecs=vp9',
-            videoBitsPerSecond: 5000000 // 5Mbps qualidade alta
+            videoBitsPerSecond: 5000000 // 5Mbps = Alta Qualidade
         });
 
         const chunks = [];
@@ -331,9 +320,8 @@ class TokenEngine {
             a.download = `token-animado-${Date.now()}.webm`;
             a.click();
             
-            // Cleanup UI
+            // Reset UI
             btn.disabled = false;
-            btn.classList.remove('recording');
             btn.innerText = originalText;
             progressContainer.style.display = 'none';
             progressBar.style.width = '0%';
@@ -341,7 +329,7 @@ class TokenEngine {
 
         recorder.start();
 
-        // Timer visual
+        // Lógica de Timer Visual
         const duration = this.config.duration * 1000;
         const startTime = Date.now();
         
@@ -355,9 +343,10 @@ class TokenEngine {
         };
         updateProgress();
 
+        // Para a gravação automaticamente
         setTimeout(() => recorder.stop(), duration);
     }
 }
 
-// Boot
+// Inicialização
 document.addEventListener('DOMContentLoaded', () => new TokenEngine());
