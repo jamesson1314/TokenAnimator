@@ -3,18 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>RPG Token Animator | Pro Offline</title>
+    <title>RPG Token Animator | Pro V2</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div class="app-container">
         <header class="top-bar">
             <div class="logo">
-                <span class="icon">🐲</span> TokenAnimator <span class="badge">V2</span>
+                <span class="icon">🐲</span> TokenAnimator <span class="badge rainbow-text">ULTRA</span>
             </div>
-            <div class="status-bar" id="status-bar">Pronto</div>
+            <div class="status-display" id="status-bar">Pronto</div>
         </header>
-        
+
         <main class="workspace">
             <aside class="sidebar">
                 <div class="control-group">
@@ -26,56 +26,59 @@
                 </div>
 
                 <div class="control-group">
-                    <div class="tooltip-header">
+                    <div class="group-header">
                         <h3>2. Foco da Animação</h3>
-                        <span class="info-icon" title="Clique em 'Definir Ponto' e depois clique no peito do personagem na imagem.">?</span>
+                        <span class="tooltip" title="Clique para definir onde o personagem respira">?</span>
                     </div>
-                    <button id="btn-set-point" class="btn secondary">🎯 Definir Ponto Central</button>
-                    <small class="hint-text">Status: <span id="point-status">Centro da Imagem</span></small>
+                    <button id="btn-set-point" class="btn secondary">🎯 Definir Ponto (Peito)</button>
+                    <small class="hint-text">Pivô: <span id="point-coords">Centro</span></small>
                 </div>
 
                 <div class="control-group">
-                    <h3>3. Parâmetros de Respiração</h3>
+                    <h3>3. Respiração & Efeitos</h3>
                     
                     <label>Velocidade (Ritmo) <span id="val-speed">1.5</span>x</label>
                     <input type="range" id="ctrl-speed" min="0.1" max="5.0" step="0.1" value="1.5">
                     
-                    <label title="Tamanho da área afetada">Área de Efeito (Raio) <span id="val-radius">150</span>px</label>
+                    <label title="Tamanho da área que vai inflar">Raio da Área <span id="val-radius">150</span>px</label>
                     <input type="range" id="ctrl-radius" min="20" max="400" step="5" value="150">
                     
-                    <label title="Quanto o peito estufa">Amplitude (Inchaço) <span id="val-amp">10</span>%</label>
+                    <label title="Intensidade do inchaço">Amplitude (Força) <span id="val-amp">10</span>%</label>
                     <input type="range" id="ctrl-amp" min="0" max="30" step="1" value="10">
                     
-                    <label>Intensidade do Brilho <span id="val-glow">0</span>px</label>
+                    <label>Brilho Pulsante <span id="val-glow">0</span>px</label>
                     <input type="range" id="ctrl-glow" min="0" max="50" step="1" value="0">
                 </div>
 
                 <div class="control-group actions">
-                    <button id="btn-toggle" class="btn primary">⏸ Pausar Animação</button>
-                    <button id="btn-reset" class="btn secondary">↺ Resetar Ajustes</button>
+                    <button id="btn-toggle" class="btn primary">⏸ Pausar</button>
+                    <button id="btn-reset" class="btn secondary">↺ Resetar</button>
                 </div>
 
                 <div class="control-group export">
                     <h3>4. Exportar</h3>
-                    <div class="dual-inputs">
+                    <div class="sub-control">
                         <label>Duração: <span id="val-dur">3</span>s</label>
                         <input type="range" id="ctrl-dur" min="1" max="10" step="1" value="3">
                     </div>
                     <button id="btn-snap" class="btn">📸 PNG (Snapshot)</button>
-                    <button id="btn-rec" class="btn danger">🎥 Renderizar WebM</button>
-                    <div id="progress-bar-container" style="display:none;">
-                        <div id="progress-bar"></div>
+                    <button id="btn-rec" class="btn danger-glow">🎥 Renderizar WebM</button>
+                    
+                    <div id="progress-container" style="display:none;">
+                        <div id="progress-bar" class="rainbow-bg"></div>
                     </div>
                 </div>
             </aside>
 
             <section class="viewport">
-                <div class="canvas-wrapper">
+                <div class="canvas-container">
                     <canvas id="tokenCanvas"></canvas>
+                    
                     <div id="placeholder-text">
-                        <div style="font-size: 3rem; margin-bottom: 10px;">drag & drop</div>
-                        Arraste uma imagem ou use o menu
+                        <div class="drop-icon">⬇</div>
+                        Arraste uma imagem ou clique no menu
                     </div>
+
                     <div id="target-marker"></div>
                 </div>
             </section>
